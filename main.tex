@@ -1,68 +1,100 @@
-\documentclass[12pt]{article}
+\documentclass[11pt]{article}
+\usepackage{geometry}
+\geometry{letterpaper, margin=1in}
 \usepackage[utf8]{inputenc}
 \usepackage{graphicx}
-\usepackage[margin=1in]{geometry}
-\usepackage{setspace}
+\usepackage{upgreek}
+\usepackage{hyperref}
+\usepackage[T1]{fontenc}
+\usepackage{amsmath}
+\usepackage[colorinlistoftodos]{todonotes}
 \usepackage{float}
-\setstretch{1.5}
+\usepackage{minted} 
 
-\title{AXI VIP Tutorial 1}
-
-\date{}
+\title{ECE532S Digital Systems Design \\ \vspace{0.4cm}
+       \Large Tutorial 7 - Simulating AXI Interfaces Using the AXI VIP \\ \vspace{0.4cm}
+       \small Last Updated: July, 2020}
+\author{ }
+\date{ }
 
 \begin{document}
-%\maketitle
-\section*{AXI VIP Tutorial 1}
-\section*{Introduction}
-The goal of this tutorial is to demonstrate how to use the Xilinx AXI Verification IP (VIP) to test and verify your custom AXI lite peripherals using the Xilinx Vivado Simulator. We will show you how to connect the VIP to your design and use it to write to and read from registers of the AXI GPIO IP. 
+\maketitle
+\vspace{-1cm}
 
-\section*{Step 1: Create a new project and block diagram}
+The goal of this tutorial is to demonstrate how to use the Xilinx AXI Verification IP (VIP) to test and verify an AXI lite peripheral using the Xilinx Vivado Simulator. This tutorial will demonstrate how to connect the VIP to your design and use it to write to and read from registers of an AXI lite IP Core, in particular the AXI GPIO core.
+
+\section{Create Project with an AXI VIP}
+\label{sec:create_proj}
 \begin{enumerate}
-	\item Create a new project for the \textbf{Nexys 4} board.
-	\item Create a new block design and name it \textbf{design\_1}.
-	\item Add and wire the \textbf{AXI Verification IP}, \textbf{AXI GPIO}, and \textbf{Constant} IPs to the diagram as shown in Figure \ref{fig:bd} below. Make sure that the port names match the figure.
-		\begin{figure}[h]
-		  \centering
-		  \includegraphics[width=\textwidth]{bd.png}
-		  \caption{Block design.}
-		  \label{fig:bd}
-		\end{figure}
-	\item Configure the \textbf{basic settings} tab of the \textbf{AXI VIP IP} as shown in the following figure. Leave the advance settings at their default values. This will set the VIP into AXI lite mode. 
-		\begin{figure}[H]
-		  \centering
-		  \includegraphics[scale=0.5]{axivipconfig.png}
-		  \caption{AXI VIP configuration window.}
-		  \label{fig:axivipconfig}
-		\end{figure}
-	\item Configure the \textbf{AXI GPIO IP} as shown in the following figure. We will be using the VIP to set the LEDs and read from the push buttons.
-		\begin{figure}[H]
-		  \centering
-		  \includegraphics[scale=0.5]{axigpioconfig.png}
-		  \caption{AXI GPIO configuration window.}
-		  \label{fig:axigpioconfig}
-		\end{figure}
-	\item Configure the \textbf{Constant} IP as shown in the following figure. The constant value of 5 will simulate pushing buttons 0 and 2.
-		\begin{figure}[H]
-		  \centering
-		  \includegraphics[scale=0.5]{axiconstantconfig.png}
-		  \caption{Constant configuration window.}
-		  \label{fig:axiconstantconfig}
-		\end{figure}
-	\item Go the \textbf{address editor} tab and set the offset address to \textbf{0x40000000}.
-		\begin{figure}[H]
-		  \centering
-		  \includegraphics[scale=0.5]{addresseditor.png}
-		  \caption{Address Editor}
-		  \label{fig:addresseditor}
-		\end{figure}
-	\item Validate the block design, create the HDL wrapper, and generate the block design. 
-		\begin{figure}[H]
-		  \centering
-		  \includegraphics[scale=0.4]{validatebd.png}
-		  \caption{Generating the block design files.}
-		  \label{fig:validatebd.png}
-		\end{figure}
+    \item Create a new project, with no sources or constraints for now, targeting the FPGA on the \textit{Nexsys} board (\textbf{xc7a100tcsg324-1}), as has been demonstrated in previous tutorials. 
+    \item Create a new block design and name it \textbf{design\_1}. In the block diagram, add an \textit{AXI Verification IP} (the AXI VIP) and an \textit{AXI GPIO} Core. 
+    \item \textbf{Double click} the VIP Core to bring up the configuration window and ensure the \textit{INTERFACE MODE} is set to \textbf{MASTER} (see Figure~\ref{fig:axivipconfig}). This will set the AXI VIP into master mode, such that it can initiate reads and writes. Note, the \textit{PROTOCOL} field is set to auto, as Vivado can deduce from the port it is connected to which protocol to use. 
+    
+    \begin{figure}[H]
+      \centering
+      \includegraphics[width=0.5\textwidth]{axivipconfig.png}
+      \caption{AXI VIP configuration window, basic settings}
+      \label{fig:axivipconfig}
+    \end{figure}
+    
+    \item Next, we need to configure the AXI GPIO Core. \textbf{Double click} the GPIO Core to bring up the configuration window. Set \textit{GPIO Width} under \textit{GPIO} to \textbf{16}, and place a checkmark by \textit{Enable Dual Channel}. This will allow us to enable and modify the settings of GPIO2. Place a checkmark by \textit{All inputs}, and set \textit{GPIO Width} under \textit{GPIO2} to \textbf{5}. Your settings should look like the settings in Figure \ref{fig:gpiocoresettings}. Press \textbf{OK} to save.
+    
+    \begin{figure}[H]
+      \centering
+      \includegraphics[width=0.6\textwidth]{gpio_core_settings.png}
+      \caption{GPIO Core configuration window, basic settings}
+      \label{fig:gpiocoresettings}
+    \end{figure}
+    
+    \item Connect the \textit{M\_AXI} signal of the VIP to the \textit{S\_AXI} signal of the GPIO, an AXI lite protocol signal. If you find that the signals will not connect, re-open the VIP Core's configuration window and verify that \textit{PROTOCOL} is set to \textbf{AXI4LITE} (manually change the setting if necessary).
+    
+    \item Add and wire the \textbf{AXI Verification IP}, \textbf{AXI GPIO}, and \textbf{Constant} IPs to the diagram as shown in Figure \ref{fig:bd} below. Make sure that the port names match the figure. The \textbf{aclk} port should be set as an \textbf{Input} \textbf{Clock} port with frequency \textbf{100MHz}. The \textbf{aresetn} port should be set as an \textbf{Input} \textbf{Reset} port set to \textbf{Active Low}. The \textit{leds} port should be set as an \textbf{Output} \textbf{Other} port which is a \textbf{vector} from \textbf{15 to 0}.
+    
+    \begin{figure}[H]
+      \centering
+      \includegraphics[width=\textwidth]{bd.png}
+      \caption{Block design.}
+      \label{fig:bd}
+    \end{figure}
+
+    % \item Configure the \textbf{AXI GPIO IP} as shown in the following figure. We will be using the VIP to set the LEDs and read from the push buttons.
+    
+    % \begin{figure}[H]
+    %   \centering
+    %   \includegraphics[scale=0.5]{axigpioconfig.png}
+    %   \caption{AXI GPIO configuration window.}
+    %   \label{fig:axigpioconfig}
+    % \end{figure}
+    
+    \item Configure the \textbf{Constant} IP as shown in Figure \ref{fig:axiconstantconfig}. The constant value of 5 will simulate pushing buttons 0 and 2.
+    
+    \begin{figure}[H]
+      \centering
+      \includegraphics[scale=0.5]{axiconstantconfig.png}
+      \caption{Constant configuration window.}
+      \label{fig:axiconstantconfig}
+    \end{figure}
+    
+    \item Go the \textbf{address editor} tab and set the offset address to \textbf{0x40000000} (see Figure \ref{fig:addresseditor}). If the GPIO Core (\textit{axi\_gpio\_0}) is \textit{unmapped}, click and drag the entire row into \textbf{MASTER\_AXI} to map it.
+    
+    \begin{figure}[H]
+      \centering
+      \includegraphics[scale=0.5]{addresseditor.png}
+      \caption{Address Editor}
+      \label{fig:addresseditor}
+    \end{figure}
+    
+    \item Validate the block design, create the HDL wrapper, and generate the block design. 
+    
+    \begin{figure}[H]
+      \centering
+      \includegraphics[scale=0.4]{validatebd.png}
+      \caption{Generating the block design files.}
+      \label{fig:validatebd.png}
+    \end{figure}
 \end{enumerate}
+
+\newpage
 \section*{Step 2: Creating the testbench}
 \begin{enumerate}
 	\item Import \textbf{tb.sv} as a \textbf{simulation source}. 	
@@ -122,7 +154,7 @@ The goal of this tutorial is to demonstrate how to use the Xilinx AXI Verificati
 		  \caption{TB test vectors.}
 		  \label{fig:tbanalysis}
 		\end{figure} 
-	\item  Start the simulation by clicking "Run Simulation" on the navigation pane. Add the AXI bus signals to the simulation window and click relaunch simulation. Make sure that you select the VIP instance in the scope window.
+	\item  Start the simulation by clicking \textbf{Run Simulation $\rightarrow$ Run Behavioural Simulation} on the navigation pane. Add the AXI bus signals in the \textit{Objects} window (Make sure that you select the VIP instance in the \textit{Scope} window) to the simulation window, shown in Figure \ref{fig:addtbsignals}. Relaunch the simulation by clicking the \textbf{Relaunch} button shown in Figure \ref{fig:relaunch}.
 		\begin{figure}[H]
 		  \centering
 		  \includegraphics[scale=0.5]{addtbsignals.png}
@@ -135,7 +167,7 @@ The goal of this tutorial is to demonstrate how to use the Xilinx AXI Verificati
 		  \caption{Relaunching the simulation.}
 		  \label{fig:relaunch}
 		\end{figure} 
-	\item Analyze the tb results...
+	\item Analyze the tb results. The waveform should look like Figure \ref{fig:simwaveform.png}. In the \textit{Tcl Console} you should see \textit{GPIO2} returning \textit{0x00000005}, as seen in Figure \ref{fig:simruntclconsole}.
 		\begin{figure}[H]
 		  \centering
 		  \includegraphics[scale=0.4]{simwaveform.png}
@@ -166,4 +198,6 @@ The goal of this tutorial is to demonstrate how to use the Xilinx AXI Verificati
 		  \label{fig:exdesign}
 		\end{figure} 
 \end{enumerate}
+
+
 \end{document}
